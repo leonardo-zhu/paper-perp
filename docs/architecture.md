@@ -40,13 +40,13 @@ flowchart LR
 
 ## Packages
 
-| Path | What lives there |
-| --- | --- |
+| Path              | What lives there                                                                                                                                                                         |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `packages/shared` | Everything both sides must agree on: EIP-712 types and wire format, order book with sequencing, order state machine, WS protocol, DTOs, error codes, market config, fixed-point helpers. |
-| `apps/gateway` | Venue adapters, market service, WS hub, SIWE auth, trading engine, SQLite store, HTTP API, metrics. |
-| `apps/web` | Vite + React app. Market feed store, wallet/SIWE/agent hooks, trading UI, Playwright e2e. |
-| `scripts` | Load test, chaos drill, SSH deploy. |
-| `deploy` | Caddy, Prometheus rules, Grafana dashboard, single-host compose. |
+| `apps/gateway`    | Venue adapters, market service, WS hub, SIWE auth, trading engine, SQLite store, HTTP API, metrics.                                                                                      |
+| `apps/web`        | Vite + React app. Market feed store, wallet/SIWE/agent hooks, trading UI, Playwright e2e.                                                                                                |
+| `scripts`         | Load test, chaos drill, SSH deploy.                                                                                                                                                      |
+| `deploy`          | Caddy, Prometheus rules, Grafana dashboard, single-host compose.                                                                                                                         |
 
 ## Market data path
 
@@ -101,17 +101,17 @@ when the market crosses them they fill as maker at their limit price.
 
 ## Failure handling
 
-| Failure | Behaviour |
-| --- | --- |
-| Upstream socket drops | Status → `reconnecting`, trading paused, banner in UI; reconnect with backoff, REST snapshot, status → `live`. |
-| Upstream message lost | `pu` mismatch → adapter resyncs from REST; clients unaffected (gateway sequence stays continuous). |
-| Upstream silent | Idle watchdog / stale timer → `stale`, trading paused, UI explains why. |
-| Client misses a delta | Client detects `prevSeq` gap → `resync` → fresh snapshot. |
-| Gateway restarts | New `epoch`; clients reconnect, resubscribe and take a snapshot; working orders reload from SQLite. |
-| Duplicate order submit (retry, double click, two tabs) | Same `(signer, nonce)` + same typed-data hash → original order returned, no second fill. |
-| Network timeout after the order filled | Client retry with the same signature is idempotent; WS push and refetch on reconnect reconcile the UI. |
-| Wallet switches account or chain | Trading gate blocks with a specific reason and action (sign in again / switch network). |
-| Slow WebSocket consumer | Dropped once its buffer passes 1 MB; it reconnects and resyncs. |
+| Failure                                                | Behaviour                                                                                                      |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| Upstream socket drops                                  | Status → `reconnecting`, trading paused, banner in UI; reconnect with backoff, REST snapshot, status → `live`. |
+| Upstream message lost                                  | `pu` mismatch → adapter resyncs from REST; clients unaffected (gateway sequence stays continuous).             |
+| Upstream silent                                        | Idle watchdog / stale timer → `stale`, trading paused, UI explains why.                                        |
+| Client misses a delta                                  | Client detects `prevSeq` gap → `resync` → fresh snapshot.                                                      |
+| Gateway restarts                                       | New `epoch`; clients reconnect, resubscribe and take a snapshot; working orders reload from SQLite.            |
+| Duplicate order submit (retry, double click, two tabs) | Same `(signer, nonce)` + same typed-data hash → original order returned, no second fill.                       |
+| Network timeout after the order filled                 | Client retry with the same signature is idempotent; WS push and refetch on reconnect reconcile the UI.         |
+| Wallet switches account or chain                       | Trading gate blocks with a specific reason and action (sign in again / switch network).                        |
+| Slow WebSocket consumer                                | Dropped once its buffer passes 1 MB; it reconnects and resyncs.                                                |
 
 ## Scaling notes
 

@@ -28,9 +28,11 @@ approved, unexpired agent.
 
 **Replay protection and idempotency.** `used_nonces(signer, nonce)` stores
 the typed-data hash of the request that used it.
+
 - Same nonce, same hash → the original order is returned (`200`,
   `duplicate: true`). Retries after a timeout are safe.
 - Same nonce, different hash → `409 nonce_reused`.
+
 The check, risk checks, matching and writes run in one synchronous
 section inside one SQLite transaction, so concurrent duplicates cannot
 both fill (covered by a test that submits the same order twice in

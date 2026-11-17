@@ -48,30 +48,30 @@ lightweight-charts). Details in [docs/architecture.md](docs/architecture.md).
 
 ## Design decisions
 
-| ADR | Decision |
-| --- | --- |
-| [0001](docs/adr/0001-simulated-matching-on-real-market-data.md) | Real market data and real signatures, simulated matching. |
-| [0002](docs/adr/0002-gateway-owned-book-sequencing.md) | Gateway owns book sequencing: coalesced top-25 deltas with `prevSeq/seq/epoch`. |
+| ADR                                                                 | Decision                                                                            |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| [0001](docs/adr/0001-simulated-matching-on-real-market-data.md)     | Real market data and real signatures, simulated matching.                           |
+| [0002](docs/adr/0002-gateway-owned-book-sequencing.md)              | Gateway owns book sequencing: coalesced top-25 deltas with `prevSeq/seq/epoch`.     |
 | [0003](docs/adr/0003-eip712-orders-replay-protection-agent-keys.md) | EIP-712 orders, `(signer, nonce)` replay table with idempotent retries, agent keys. |
-| [0004](docs/adr/0004-wallet-connection-wagmi3-eip6963.md) | wagmi 3 + EIP-6963 instead of RainbowKit. |
-| [0005](docs/adr/0005-single-process-sqlite.md) | One process + SQLite; atomicity from a synchronous critical section. |
-| [0006](docs/adr/0006-fixed-point-at-the-signing-boundary.md) | Exact fixed-point (bigint, 1e8) at the signing boundary. |
+| [0004](docs/adr/0004-wallet-connection-wagmi3-eip6963.md)           | wagmi 3 + EIP-6963 instead of RainbowKit.                                           |
+| [0005](docs/adr/0005-single-process-sqlite.md)                      | One process + SQLite; atomicity from a synchronous critical section.                |
+| [0006](docs/adr/0006-fixed-point-at-the-signing-boundary.md)        | Exact fixed-point (bigint, 1e8) at the signing boundary.                            |
 
 ## Verified behaviour
 
 Each of these is covered by an automated test or measured with the scripts
 in `scripts/` (numbers from 2026-11-17, see the [runbook](docs/runbook.md)).
 
-| Requirement | Result | How it is checked |
-| --- | --- | --- |
-| Upstream disconnect recovers without a page reload | Back to `live` in ~1.2 s; client book matches the server snapshot ~5 ms later | `pnpm chaos`, Playwright `degrades to read-only…` |
-| Lost upstream message never reaches clients | Gateway resyncs from REST; 0 client resyncs | `pnpm chaos` (`gap`), Binance sync unit tests |
-| Stale feed pauses trading and explains why | Status `stale`, order button disabled, banner shown | Playwright `marks the feed stale…` |
-| The same signed order submitted twice fills once | Second request returns the original order (`duplicate: true`) | Parallel-submit test in `trading.test.ts` |
-| Expired, reused-nonce and wrong-chain signatures are rejected with a clear error | `expired`, `nonce_reused` (409), `wrong_chain` / `signer_not_authorized` | `trading.test.ts` |
-| SIWE replay and phishing domains rejected | Single-use nonce, domain/URI/chain allow lists | `trading.test.ts` |
-| 1,000 concurrent WebSocket clients | p99 delivery 23 ms, 0 gaps, ~170 MB RSS | `pnpm loadtest` |
-| Full user flow in a real browser | Connect → SIWE → market buy → agent key → limit → cancel → close | Playwright with an EIP-6963 test wallet |
+| Requirement                                                                      | Result                                                                        | How it is checked                                 |
+| -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------- |
+| Upstream disconnect recovers without a page reload                               | Back to `live` in ~1.2 s; client book matches the server snapshot ~5 ms later | `pnpm chaos`, Playwright `degrades to read-only…` |
+| Lost upstream message never reaches clients                                      | Gateway resyncs from REST; 0 client resyncs                                   | `pnpm chaos` (`gap`), Binance sync unit tests     |
+| Stale feed pauses trading and explains why                                       | Status `stale`, order button disabled, banner shown                           | Playwright `marks the feed stale…`                |
+| The same signed order submitted twice fills once                                 | Second request returns the original order (`duplicate: true`)                 | Parallel-submit test in `trading.test.ts`         |
+| Expired, reused-nonce and wrong-chain signatures are rejected with a clear error | `expired`, `nonce_reused` (409), `wrong_chain` / `signer_not_authorized`      | `trading.test.ts`                                 |
+| SIWE replay and phishing domains rejected                                        | Single-use nonce, domain/URI/chain allow lists                                | `trading.test.ts`                                 |
+| 1,000 concurrent WebSocket clients                                               | p99 delivery 23 ms, 0 gaps, ~170 MB RSS                                       | `pnpm loadtest`                                   |
+| Full user flow in a real browser                                                 | Connect → SIWE → market buy → agent key → limit → cancel → close              | Playwright with an EIP-6963 test wallet           |
 
 ## Run it
 

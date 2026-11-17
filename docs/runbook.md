@@ -2,12 +2,12 @@
 
 ## Environments
 
-| Env | How it runs | Market source | Notes |
-| --- | --- | --- | --- |
-| dev | `pnpm dev` (gateway on 8787, Vite on 5173 with proxy) | `binance` (or `pnpm dev:mock`) | Fault injection can be enabled in `apps/gateway/.env`. |
-| e2e / CI | Playwright starts gateway + Vite | `mock` | In-memory SQLite, fault injection on. |
-| staging | Same image as prod, `APP_ENV=staging` | `binance` | Fault injection allowed for chaos drills. |
-| prod | Single container behind a reverse proxy | `binance` | `ENABLE_FAULT_INJECTION=false`, Secure cookies, `TRUST_PROXY=true`. |
+| Env      | How it runs                                           | Market source                  | Notes                                                               |
+| -------- | ----------------------------------------------------- | ------------------------------ | ------------------------------------------------------------------- |
+| dev      | `pnpm dev` (gateway on 8787, Vite on 5173 with proxy) | `binance` (or `pnpm dev:mock`) | Fault injection can be enabled in `apps/gateway/.env`.              |
+| e2e / CI | Playwright starts gateway + Vite                      | `mock`                         | In-memory SQLite, fault injection on.                               |
+| staging  | Same image as prod, `APP_ENV=staging`                 | `binance`                      | Fault injection allowed for chaos drills.                           |
+| prod     | Single container behind a reverse proxy               | `binance`                      | `ENABLE_FAULT_INJECTION=false`, Secure cookies, `TRUST_PROXY=true`. |
 
 All configuration is environment variables, validated with zod at boot
 (`apps/gateway/src/config.ts`); the process refuses to start on invalid
@@ -54,11 +54,11 @@ so an older binary keeps working against a newer database.
 
 ## Health and monitoring
 
-| Endpoint | Meaning |
-| --- | --- |
-| `GET /healthz` | Process is up (Docker healthcheck). |
-| `GET /readyz` | 200 once the DB answers and every market has received a snapshot; includes market status, venue and WS client count. |
-| `GET /metrics` | Prometheus metrics (internal only). |
+| Endpoint       | Meaning                                                                                                              |
+| -------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `GET /healthz` | Process is up (Docker healthcheck).                                                                                  |
+| `GET /readyz`  | 200 once the DB answers and every market has received a snapshot; includes market status, venue and WS client count. |
+| `GET /metrics` | Prometheus metrics (internal only).                                                                                  |
 
 Key metrics: `market_live`, `upstream_messages_total`, `upstream_resyncs_total{reason}`,
 `upstream_reconnects_total`, `upstream_event_lag_ms`, `ws_connections`,
@@ -77,12 +77,12 @@ signatures are redacted. Errors that are not `AppError`s go to Sentry when
 
 ## Alerts and what to do
 
-| Alert | First checks |
-| --- | --- |
-| `MarketFeedNotLive` | `/readyz` reason; container logs for `upstream error`; reachability of the venue from the host (`curl https://fapi.binance.com/fapi/v1/ping`). If the venue is blocked, switch `MARKET_SOURCE=hyperliquid` and `docker compose up -d`. Trading is already paused automatically. |
-| `UpstreamResyncStorm` | Packet loss to the venue or an overloaded event loop (`nodejs_eventloop_lag_p99_seconds`). |
-| `SlowClientsDropped` | One client on a bad network is normal; many means broadcast is too heavy. Check `ws_broadcast_duration_seconds`. |
-| `HighApiLatency` / `Http5xx` | Logs filtered by `requestId`; SQLite lock contention (`busy_timeout`), disk full. |
+| Alert                        | First checks                                                                                                                                                                                                                                                                    |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MarketFeedNotLive`          | `/readyz` reason; container logs for `upstream error`; reachability of the venue from the host (`curl https://fapi.binance.com/fapi/v1/ping`). If the venue is blocked, switch `MARKET_SOURCE=hyperliquid` and `docker compose up -d`. Trading is already paused automatically. |
+| `UpstreamResyncStorm`        | Packet loss to the venue or an overloaded event loop (`nodejs_eventloop_lag_p99_seconds`).                                                                                                                                                                                      |
+| `SlowClientsDropped`         | One client on a bad network is normal; many means broadcast is too heavy. Check `ws_broadcast_duration_seconds`.                                                                                                                                                                |
+| `HighApiLatency` / `Http5xx` | Logs filtered by `requestId`; SQLite lock contention (`busy_timeout`), disk full.                                                                                                                                                                                               |
 
 ## Chaos drill
 
@@ -95,11 +95,11 @@ Injects `disconnect`, `gap` (drop one depth event) and `freeze` (silence) and
 reports time back to `live` and time until a client mirror matches the REST
 snapshot. Last run against live Binance (2026-11-17, laptop):
 
-| Fault | Market status | Back to live | Client book consistent after live |
-| --- | --- | --- | --- |
-| disconnect | reconnecting | ~1.2 s | ~5 ms |
-| gap | stayed live (gateway resynced upstream) | — | ~5 ms, 0 client resyncs |
-| freeze 7 s | stale, trading paused | when data resumes | ~5 ms |
+| Fault      | Market status                           | Back to live      | Client book consistent after live |
+| ---------- | --------------------------------------- | ----------------- | --------------------------------- |
+| disconnect | reconnecting                            | ~1.2 s            | ~5 ms                             |
+| gap        | stayed live (gateway resynced upstream) | —                 | ~5 ms, 0 client resyncs           |
+| freeze 7 s | stale, trading paused                   | when data resumes | ~5 ms                             |
 
 ## Load test
 
@@ -110,9 +110,9 @@ pnpm loadtest -- --url ws://localhost:8787/ws --clients 1000 --seconds 20
 Last run (2026-11-17, Apple Silicon laptop, live Binance feed, production build):
 
 | Clients | Messages/s delivered | Delivery latency p50 / p95 / p99 | Sequence gaps | Gateway RSS |
-| --- | --- | --- | --- | --- |
-| 200 | 2,322 | 3 / 6 / 8 ms | 0 | ~150–180 MB |
-| 1,000 | 11,600 | 10 / 20 / 23 ms | 0 | ~170 MB |
+| ------- | -------------------- | -------------------------------- | ------------- | ----------- |
+| 200     | 2,322                | 3 / 6 / 8 ms                     | 0             | ~150–180 MB |
+| 1,000   | 11,600               | 10 / 20 / 23 ms                  | 0             | ~170 MB     |
 
 Latency is from the gateway publish timestamp to client receipt on the same
 machine; it measures fan-out cost, not internet latency.

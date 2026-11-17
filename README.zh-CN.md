@@ -43,15 +43,15 @@ pnpm monorepo 分三块：
 
 ## 验收结果
 
-| 要求 | 结果 | 验证方式 |
-| --- | --- | --- |
-| 上游断线后不刷新页面也能恢复 | 约 1.2 秒回到 live，之后约 5ms 客户端订单簿和服务端快照一致 | `pnpm chaos`、Playwright |
-| 上游丢包不影响客户端 | gateway 自己重新同步，客户端重新同步 0 次 | `pnpm chaos`（gap）、单元测试 |
-| 行情过期时暂停交易并说明原因 | 状态变为 stale，下单按钮禁用，显示横幅 | Playwright |
-| 同一个签名订单提交两次只成交一次 | 第二次返回原订单（`duplicate: true`） | 并发提交测试 |
-| 过期、nonce 重复、错链的签名被拒绝，且错误信息明确 | `expired`、`nonce_reused`、`wrong_chain` / `signer_not_authorized` | 单元/集成测试 |
-| 1000 个并发 WebSocket 客户端 | p99 投递延迟 23ms，0 缺口，内存约 170MB | `pnpm loadtest` |
-| 真实浏览器里走通完整流程 | 连接 → SIWE → 市价买入 → 启用 agent → 限价单 → 撤单 → 平仓 | Playwright + EIP-6963 测试钱包 |
+| 要求                                               | 结果                                                               | 验证方式                       |
+| -------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------ |
+| 上游断线后不刷新页面也能恢复                       | 约 1.2 秒回到 live，之后约 5ms 客户端订单簿和服务端快照一致        | `pnpm chaos`、Playwright       |
+| 上游丢包不影响客户端                               | gateway 自己重新同步，客户端重新同步 0 次                          | `pnpm chaos`（gap）、单元测试  |
+| 行情过期时暂停交易并说明原因                       | 状态变为 stale，下单按钮禁用，显示横幅                             | Playwright                     |
+| 同一个签名订单提交两次只成交一次                   | 第二次返回原订单（`duplicate: true`）                              | 并发提交测试                   |
+| 过期、nonce 重复、错链的签名被拒绝，且错误信息明确 | `expired`、`nonce_reused`、`wrong_chain` / `signer_not_authorized` | 单元/集成测试                  |
+| 1000 个并发 WebSocket 客户端                       | p99 投递延迟 23ms，0 缺口，内存约 170MB                            | `pnpm loadtest`                |
+| 真实浏览器里走通完整流程                           | 连接 → SIWE → 市价买入 → 启用 agent → 限价单 → 撤单 → 平仓         | Playwright + EIP-6963 测试钱包 |
 
 ## 本地运行
 
