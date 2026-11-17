@@ -16,6 +16,7 @@ const STATUS: Partial<Record<ErrorCode, ContentfulStatusCode>> = {
   unknown_market: 404,
   invalid_order: 400,
   order_not_found: 404,
+  not_found: 404,
   order_not_open: 409,
   rate_limited: 429,
   internal: 500,

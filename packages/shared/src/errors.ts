@@ -18,6 +18,7 @@ export const ERROR_MESSAGES = {
   reduce_only_violation: 'Reduce-only order would increase the position.',
   no_liquidity: 'No liquidity at or better than your price.',
   order_not_found: 'Order not found.',
+  not_found: 'Not found.',
   order_not_open: 'The order is no longer open.',
   rate_limited: 'Too many requests, slow down.',
   internal: 'Something went wrong on our side.',

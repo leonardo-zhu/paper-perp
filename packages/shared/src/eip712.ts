@@ -55,7 +55,7 @@ export const APPROVE_AGENT_TYPES = {
   ],
 } as const;
 
-export interface OrderMessage {
+export type OrderMessage = {
   account: Address;
   symbol: string;
   isBuy: boolean;
@@ -67,21 +67,21 @@ export interface OrderMessage {
   cloid: Hex;
   nonce: bigint;
   deadline: bigint;
-}
+};
 
-export interface CancelMessage {
+export type CancelMessage = {
   account: Address;
   cloid: Hex;
   nonce: bigint;
   deadline: bigint;
-}
+};
 
-export interface ApproveAgentMessage {
+export type ApproveAgentMessage = {
   account: Address;
   agent: Address;
   validUntil: bigint;
   nonce: bigint;
-}
+};
 
 export function orderTypedData(chainId: number, message: OrderMessage) {
   return {

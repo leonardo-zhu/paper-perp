@@ -103,16 +103,22 @@ export const siweVerifyBodySchema = z.object({
 export const placeOrderBodySchema = z.object({
   order: orderWireSchema,
   signature: signatureSchema,
+  /** Unsigned hint so a wrong-network signature gets a clear error. */
+  chainId: z.number().int().optional(),
 });
 
 export const cancelOrderBodySchema = z.object({
   cancel: cancelWireSchema,
   signature: signatureSchema,
+  /** Unsigned hint so a wrong-network signature gets a clear error. */
+  chainId: z.number().int().optional(),
 });
 
 export const approveAgentBodySchema = z.object({
   approval: approveAgentWireSchema,
   signature: signatureSchema,
+  /** Unsigned hint so a wrong-network signature gets a clear error. */
+  chainId: z.number().int().optional(),
 });
 
 export interface PlaceOrderResponse {
