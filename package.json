@@ -1,0 +1,32 @@
+{
+  "name": "paper-perp",
+  "private": true,
+  "description": "PaperPerp — paper-trading perpetual futures terminal",
+  "type": "module",
+  "packageManager": "pnpm@10.33.2",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter \"./apps/*\" dev",
+    "dev:mock": "MARKET_SOURCE=mock pnpm dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e": "pnpm --filter @paperperp/web e2e",
+    "loadtest": "tsx scripts/loadtest.ts",
+    "chaos": "tsx scripts/chaos.ts"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.8",
+    "@types/node": "^24.0.0",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0",
+    "ws": "^8.23.0"
+  }
+}
