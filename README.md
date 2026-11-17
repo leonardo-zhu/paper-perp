@@ -6,7 +6,7 @@ practise the parts of a trading front end that matter in production:
 real-time data consistency, signature security, order lifecycle, failure
 handling, deployment and observability.
 
-[中文说明](README.zh-CN.md) · [Architecture](docs/architecture.md) · [Runbook](docs/runbook.md) · [ADRs](docs/adr)
+[中文说明](README.zh-CN.md) · [Architecture](docs/architecture.md) · [Runbook](docs/runbook.md) · [ADRs](docs/adr) · [Incidents](docs/incidents)
 
 ![CI](https://github.com/leonardo-zhu/paper-perp/actions/workflows/ci.yml/badge.svg)
 

@@ -92,6 +92,10 @@ signatures are redacted. Errors that are not `AppError`s go to Sentry when
 | `SlowClientsDropped`         | One client on a bad network is normal; many means broadcast is too heavy. Check `ws_broadcast_duration_seconds`.                                                                                                                                                                |
 | `HighApiLatency` / `Http5xx` | Logs filtered by `requestId`; SQLite lock contention (`busy_timeout`), disk full.                                                                                                                                                                                               |
 
+## Incidents
+
+Postmortems live in `docs/incidents/`. 2026-11-17: [502s during every deploy](incidents/2026-11-17-deploy-502.md).
+
 ## Chaos drill
 
 ```bash

@@ -2,7 +2,7 @@
 
 模拟永续合约交易终端。**行情是真实的，钱包登录和 EIP-712 签名下单是真实的，成交是模拟的。**做这个项目，是为了把交易前端在生产环境里真正要面对的几件事完整走一遍：实时数据的一致性、签名安全、订单生命周期、异常处理、部署和可观测性。
 
-[English](README.md) · [架构](docs/architecture.md) · [运维手册](docs/runbook.md) · [架构决策记录 ADR](docs/adr)
+[English](README.md) · [架构](docs/architecture.md) · [运维手册](docs/runbook.md) · [架构决策记录 ADR](docs/adr) · [事故复盘](docs/incidents)
 
 ## 功能
 
@@ -52,6 +52,10 @@ pnpm monorepo 分三块：
 | 过期、nonce 重复、错链的签名被拒绝，且错误信息明确 | `expired`、`nonce_reused`、`wrong_chain` / `signer_not_authorized` | 单元/集成测试                  |
 | 1000 个并发 WebSocket 客户端                       | p99 投递延迟 23ms，0 缺口，内存约 170MB                            | `pnpm loadtest`                |
 | 真实浏览器里走通完整流程                           | 连接 → SIWE → 市价买入 → 启用 agent → 限价单 → 撤单 → 平仓         | Playwright + EIP-6963 测试钱包 |
+
+## 事故复盘
+
+- [2026-11-17 每次部署都会出现约 10 秒的 502](docs/incidents/2026-11-17-deploy-502.md)：优雅关闭时被 keep-alive 连接卡住、启动时先拉 K 线才开端口、代理不重试，加上 bind mount 和 `sed -i` 导致配置没有生效。包含排查时间线、根因、修复前后的代码和实测数据。
 
 ## 本地运行
 
