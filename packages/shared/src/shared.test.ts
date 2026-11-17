@@ -120,3 +120,42 @@ describe('EIP-712 order', () => {
     expect(otherChain).not.toBe(account.address);
   });
 });
+
+describe('OrderBook top-N and pruning', () => {
+  const rand = (seed: number) => () => {
+    seed = (seed * 1_103_515_245 + 12_345) % 2 ** 31;
+    return seed / 2 ** 31;
+  };
+
+  it('top() matches a full sort on random books', () => {
+    const r = rand(7);
+    for (let round = 0; round < 50; round++) {
+      const book = new OrderBook();
+      const bids: [number, number][] = [];
+      const asks: [number, number][] = [];
+      const n = Math.floor(r() * 300);
+      for (let i = 0; i < n; i++) {
+        bids.push([Math.round(r() * 100_000) / 10, 1 + i]);
+        asks.push([10_000 + Math.round(r() * 100_000) / 10, 1 + i]);
+      }
+      book.applySnapshot(0, bids, asks);
+      const depth = 1 + Math.floor(r() * 30);
+      const expectBids = [...book.bids].sort((a, b) => b[0] - a[0]).slice(0, depth);
+      const expectAsks = [...book.asks].sort((a, b) => a[0] - b[0]).slice(0, depth);
+      expect(book.top(depth)).toEqual({ bids: expectBids, asks: expectAsks });
+    }
+  });
+
+  it('prune keeps only the best levels per side', () => {
+    const book = new OrderBook();
+    const bids = Array.from({ length: 50 }, (_, i) => [100 - i, 1] as [number, number]);
+    const asks = Array.from({ length: 50 }, (_, i) => [101 + i, 1] as [number, number]);
+    book.applySnapshot(0, bids, asks);
+    const before = book.top(10);
+    expect(book.prune(20)).toBe(60);
+    expect(book.size).toBe(40);
+    expect(book.top(10)).toEqual(before);
+    expect(book.bestBid()).toBe(100);
+    expect(Math.min(...book.bids.keys())).toBe(81);
+  });
+});

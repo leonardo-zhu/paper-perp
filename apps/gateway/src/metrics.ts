@@ -71,6 +71,12 @@ export function createMetrics() {
       labelNames: ['symbol'] as const,
       registers: [registry],
     }),
+    bookLevels: new client.Gauge({
+      name: 'book_levels',
+      help: 'Price levels held in the upstream book (both sides, after pruning)',
+      labelNames: ['symbol'] as const,
+      registers: [registry],
+    }),
     orders: new client.Counter({
       name: 'orders_total',
       help: 'Order requests by outcome',

@@ -60,11 +60,28 @@ export class OrderBook {
     }
   }
 
+  /**
+   * Best `depth` levels per side in one pass over the map, without sorting
+   * the whole book: O(n · depth) with depth ≈ 25, versus O(n log n) for a
+   * full sort. This runs every publish tick, so it must not grow with the
+   * number of far-away levels the venue keeps sending.
+   */
   top(depth: number): BookView {
-    return {
-      bids: [...this.bids].sort((a, b) => b[0] - a[0]).slice(0, depth),
-      asks: [...this.asks].sort((a, b) => a[0] - b[0]).slice(0, depth),
-    };
+    return { bids: bestLevels(this.bids, depth, true), asks: bestLevels(this.asks, depth, false) };
+  }
+
+  /** Total price levels held (both sides). */
+  get size(): number {
+    return this.bids.size + this.asks.size;
+  }
+
+  /**
+   * Keep only the `maxLevels` best levels per side. Diff-depth feeds keep
+   * adding levels far from the market that are never displayed or traded
+   * against; without pruning the book (and every scan over it) grows forever.
+   */
+  prune(maxLevels: number): number {
+    return pruneSide(this.bids, maxLevels, true) + pruneSide(this.asks, maxLevels, false);
   }
 
   bestBid(): number | undefined {
@@ -93,6 +110,32 @@ export class OrderBook {
     if (bid === undefined || ask === undefined || bid < ask) return;
     for (const p of [...this.bids.keys()]) if (p >= ask) this.bids.delete(p);
   }
+}
+
+/** Insertion into a small sorted buffer; `desc` for bids (highest first). */
+function bestLevels(side: Map<number, number>, depth: number, desc: boolean): Level[] {
+  const out: Level[] = [];
+  if (depth <= 0) return out;
+  const better = desc ? (a: number, b: number) => a > b : (a: number, b: number) => a < b;
+  for (const [price, size] of side) {
+    if (out.length === depth && !better(price, out[depth - 1]![0])) continue;
+    let i = out.length < depth ? out.length : depth - 1;
+    if (out.length < depth) out.push([price, size]);
+    while (i > 0 && better(price, out[i - 1]![0])) {
+      out[i] = out[i - 1]!;
+      i--;
+    }
+    out[i] = [price, size];
+  }
+  return out;
+}
+
+function pruneSide(side: Map<number, number>, maxLevels: number, desc: boolean): number {
+  const excess = side.size - maxLevels;
+  if (excess <= 0) return 0;
+  const prices = [...side.keys()].sort(desc ? (a, b) => b - a : (a, b) => a - b);
+  for (let i = maxLevels; i < prices.length; i++) side.delete(prices[i]!);
+  return excess;
 }
 
 /** Levels that changed between two views; removed levels get size 0. */

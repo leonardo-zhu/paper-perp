@@ -23,6 +23,8 @@ export interface Publisher {
 }
 
 const MAX_TRADES = 50;
+/** Levels kept per side of the upstream book; far levels are never shown or traded. */
+const MAX_BOOK_LEVELS = 1_000;
 const MAX_CANDLES = 500;
 
 interface SymbolState {
@@ -219,6 +221,8 @@ export class MarketService {
       const st = this.st(symbol);
       if (st.dirty) {
         st.dirty = false;
+        if (st.book.size > MAX_BOOK_LEVELS * 3) st.book.prune(MAX_BOOK_LEVELS);
+        this.deps.metrics.bookLevels.set({ symbol }, st.book.size);
         const view = st.book.top(BOOK_DEPTH);
         const delta = diffViews(st.published, view);
         if (delta.bids.length || delta.asks.length) {
