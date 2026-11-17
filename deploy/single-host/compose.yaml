@@ -3,7 +3,8 @@
 # IMAGE_TAG, PORT and the origin variables, then `docker compose up -d`.
 services:
   paperperp:
-    image: paperperp:${IMAGE_TAG:?set IMAGE_TAG in .env}
+    # IMAGE_REPO: ghcr.io/<owner>/paper-perp for CI deploys, paperperp for images shipped over SSH.
+    image: ${IMAGE_REPO:-paperperp}:${IMAGE_TAG:?set IMAGE_TAG in .env}
     container_name: paperperp
     restart: unless-stopped
     network_mode: host

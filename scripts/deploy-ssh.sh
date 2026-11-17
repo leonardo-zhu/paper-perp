@@ -23,6 +23,6 @@ echo "==> shipping image to $DEPLOY_HOST"
 docker save "$IMAGE" | gzip -1 | ssh "$DEPLOY_HOST" "gunzip | docker load"
 
 echo "==> rolling out"
-ssh "$DEPLOY_HOST" "sh -c 'cd $DEPLOY_DIR && sed -i \"s/^IMAGE_TAG=.*/IMAGE_TAG=$TAG/\" .env && docker compose up -d && sleep 5 && docker compose ps'"
+ssh "$DEPLOY_HOST" "sh -c 'cd $DEPLOY_DIR && sed -i \"s/^IMAGE_TAG=.*/IMAGE_TAG=$TAG/\" .env && sed -i \"/^IMAGE_REPO=/d\" .env && docker compose up -d && sleep 5 && docker compose ps'"
 
 echo "==> previous tags stay on the host; roll back by setting IMAGE_TAG in $DEPLOY_DIR/.env and running docker compose up -d"

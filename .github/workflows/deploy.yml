@@ -1,0 +1,113 @@
+name: Deploy
+
+# Runs after CI succeeds on main: build a native arm64 image, push it to
+# GHCR, then roll it out on the self-hosted runner that lives on the target
+# host. Manual runs can redeploy any commit that passed CI.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/paper-perp
+  SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+jobs:
+  build:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SHA }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+          push: true
+          build-args: |
+            RELEASE=${{ env.SHA }}
+            VITE_CHAIN_ID=421614
+          cache-from: type=gha,scope=arm64
+          cache-to: type=gha,scope=arm64,mode=max
+          tags: |
+            ${{ env.IMAGE }}:${{ env.SHA }}
+            ${{ env.IMAGE }}:latest
+
+  deploy:
+    needs: build
+    runs-on: [self-hosted, r4s]
+    timeout-minutes: 10
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SHA }}
+      - name: Roll out
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+          DEPLOY_DIR: /opt/stacks/paper-perp
+        run: |
+          set -euo pipefail
+          if [ ! -f "$DEPLOY_DIR/.env" ]; then
+            echo "ERROR: $DEPLOY_DIR/.env is missing; see docs/runbook.md for first-time setup"
+            exit 1
+          fi
+
+          # compose.yaml comes from the repo on every deploy; .env lives only on the host.
+          cp deploy/single-host/compose.yaml "$DEPLOY_DIR/compose.yaml"
+          cd "$DEPLOY_DIR"
+
+          # The host reaches ghcr.io through a proxy that drops connections now and then.
+          retry() {
+            for i in 1 2 3 4 5; do
+              "$@" && return 0
+              echo "attempt $i failed, retrying in 10s: $*"
+              sleep 10
+            done
+            return 1
+          }
+          retry sh -c 'echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin'
+
+          # Shell env overrides .env for compose interpolation: pin this exact build.
+          export IMAGE_REPO="$IMAGE" IMAGE_TAG="$SHA"
+          retry docker compose pull
+          docker compose up -d --remove-orphans
+
+          # Health gate: fail the job (and keep the previous tag documented) if it doesn't come up.
+          PORT="$(grep -E '^PORT=' .env | cut -d= -f2)"
+          for i in $(seq 1 30); do
+            if curl -fsS "http://127.0.0.1:${PORT:-8787}/readyz" >/dev/null; then
+              echo "ready: $IMAGE:$SHA"
+              break
+            fi
+            [ "$i" = 30 ] && { docker compose logs --tail 50; echo "not ready after 60s"; exit 1; }
+            sleep 2
+          done
+
+          # Record what is running so a manual rollback is one edit away.
+          sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$SHA/" .env
+          grep -q '^IMAGE_REPO=' .env && sed -i "s#^IMAGE_REPO=.*#IMAGE_REPO=$IMAGE#" .env || echo "IMAGE_REPO=$IMAGE" >> .env
+
+          # Keep the current and previous build on the SD card, delete older ones.
+          docker images "$IMAGE" --format '{{.CreatedAt}}\t{{.Repository}}:{{.Tag}}' \
+            | grep -v ':latest$' | sort -r | awk -F'\t' 'NR > 2 { print $2 }' \
+            | xargs -r docker rmi || true
+          docker image prune -f
