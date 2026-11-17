@@ -15,9 +15,15 @@ values. See `.env.example`.
 
 ## Deploy
 
-**With a registry (CI):** pushing to `main` builds `ghcr.io/<owner>/paper-perp:<sha>`
-for amd64 and arm64. On the host: set `IMAGE_TAG` in `.env` (or point the
-compose file at the ghcr image) and run `docker compose pull && docker compose up -d`.
+**Continuous deployment (default):** when CI passes on `main`,
+`.github/workflows/deploy.yml` builds `ghcr.io/<owner>/paper-perp:<sha>` on a
+native arm64 runner and pushes it, then a self-hosted runner labelled
+`r4s` on the target host copies `deploy/single-host/compose.yaml` into
+`/opt/stacks/paper-perp`, pulls with retries, runs `docker compose up -d`,
+waits for `/readyz`, writes `IMAGE_REPO`/`IMAGE_TAG` into `.env` and keeps
+the two most recent builds. It can also be run by hand (Actions → Deploy →
+Run workflow). First-time host setup: create the directory, `.env` (see
+below) and the data directory owned by uid 1000.
 
 **Without a registry (home lab):**
 
