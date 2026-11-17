@@ -8,5 +8,9 @@
 	# WebSocket upgrades are proxied transparently.
 	reverse_proxy app:8787 {
 		header_up X-Forwarded-For {remote_host}
+		# Hold requests while the app restarts during a deploy instead of
+		# returning 502 straight away.
+		lb_try_duration 20s
+		lb_try_interval 250ms
 	}
 }

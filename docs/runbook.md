@@ -46,7 +46,9 @@ SIWE_DOMAINS=perp.example.com
 APP_ENV=prod
 ```
 
-Reverse proxy: forward everything (including WebSocket upgrades on `/ws`) to
+Reverse proxy: retry the upstream for ~20 s (`lb_try_duration` in Caddy) so the
+few seconds of a container restart show up as a slow request instead of a
+502, then forward everything (including WebSocket upgrades on `/ws`) to
 `127.0.0.1:$PORT`, and block `/metrics` from the public internet (see
 `deploy/Caddyfile`).
 
