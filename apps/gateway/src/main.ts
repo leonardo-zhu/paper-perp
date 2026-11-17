@@ -118,11 +118,13 @@ const app = createApp({
   clientIp: ipFromContext,
 });
 
-await market.start();
+// Listen first: the port must be open as soon as possible after a restart
+// (the reverse proxy is retrying). /readyz stays 503 until market data arrives.
 const server = serve({ fetch: app.fetch, port: cfg.PORT, hostname: cfg.HOST }, (info) => {
   log.info({ port: info.port, venue: venue.name, chainId: cfg.CHAIN_ID }, 'gateway listening');
 }) as Server;
 hub.attach(server);
+void market.start();
 
 const purge = setInterval(() => store.purgeExpired(Date.now()), 10 * 60_000);
 
@@ -136,7 +138,14 @@ async function shutdown(signal: string) {
   force.unref();
   market.stop();
   hub?.close();
-  await new Promise<void>((resolve) => server.close(() => resolve()));
+  // Stop accepting, then drop idle keep-alive sockets right away so the
+  // process exits in well under a second instead of waiting for browsers
+  // to hang up. In-flight requests still finish.
+  const closed = new Promise<void>((resolve) => server.close(() => resolve()));
+  server.closeIdleConnections();
+  const hard = setTimeout(() => server.closeAllConnections(), 3_000);
+  await closed;
+  clearTimeout(hard);
   store.db.close();
   await Sentry.flush(2_000);
   process.exit(0);

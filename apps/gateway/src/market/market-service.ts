@@ -89,19 +89,29 @@ export class MarketService {
     return this.venue.name;
   }
 
+  /**
+   * Starts the live feed immediately and loads kline history in the
+   * background, so a restart never waits on a REST round trip to the venue.
+   * Resolves once history is loaded (or failed); callers need not await it.
+   */
   async start(): Promise<void> {
-    await Promise.all(
-      SYMBOLS.map(async (s) => {
-        try {
-          this.st(s).candles = await this.venue.fetchKlines(s, MAX_CANDLES);
-        } catch (err) {
-          this.deps.log.warn({ symbol: s, err: (err as Error).message }, 'kline history failed');
-        }
-      }),
-    );
     this.venue.start(this.sink);
     this.timers.push(setInterval(() => this.flush(), BOOK_PUBLISH_INTERVAL_MS));
     this.timers.push(setInterval(() => this.checkStatus(), 250));
+    await Promise.all(SYMBOLS.map((s) => this.loadHistory(s)));
+  }
+
+  private async loadHistory(symbol: MarketSymbol): Promise<void> {
+    try {
+      const history = await this.venue.fetchKlines(symbol, MAX_CANDLES);
+      const st = this.st(symbol);
+      // Live candles that arrived while history was loading are newer: they win.
+      const byTime = new Map(history.map((c) => [c.t, c]));
+      for (const c of st.candles) byTime.set(c.t, c);
+      st.candles = [...byTime.values()].sort((a, b) => a.t - b.t).slice(-MAX_CANDLES);
+    } catch (err) {
+      this.deps.log.warn({ symbol, err: (err as Error).message }, 'kline history failed');
+    }
   }
 
   stop(): void {
