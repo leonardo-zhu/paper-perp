@@ -1,4 +1,10 @@
-import { getMarket, isDecimalString, isMultipleOf } from '@paperperp/shared';
+import {
+  getMarket,
+  isDecimalString,
+  isMultipleOf,
+  type MarketConfig,
+  priceDecimals,
+} from '@paperperp/shared';
 import { useState } from 'react';
 import { useConnection, useSwitchChain } from 'wagmi';
 import { CHAIN_ID } from '../config';
@@ -7,14 +13,15 @@ import { useSigner } from '../features/signer';
 import { useAccountData, usePlaceOrder, worstPrice } from '../features/trading';
 import { describeError } from '../lib/api';
 import { fmtUsd } from '../lib/format';
-import { marketFeed, useMarket } from '../stores/market';
+import { useMarket } from '../stores/market';
 import { useOrderForm } from '../stores/order-form';
 import { toast } from '../stores/toasts';
 
-const market = getMarket(marketFeed.symbol);
-
 export function OrderForm() {
   const form = useOrderForm();
+  const symbol = useMarket((s) => s.symbol);
+  const market = getMarket(symbol);
+  const dp = priceDecimals(symbol);
   const mid = useMarket((s) => s.mid);
   const gate = useTradingGate();
   const place = usePlaceOrder();
@@ -29,7 +36,7 @@ export function OrderForm() {
   const notional = refPrice && Number(form.size) ? refPrice * Number(form.size) : 0;
   const margin = notional / market.maxLeverage;
   const available = account.data?.account.available;
-  const validation = validate(form.type, form.price, form.size);
+  const validation = validate(market, form.type, form.price, form.size);
   const canSubmit = gate.kind === 'ok' && !validation && !place.isPending;
 
   const submit = () => {
@@ -66,17 +73,17 @@ export function OrderForm() {
 
       {form.type === 'limit' ? (
         <label className="field">
-          <span>Price (USDC)</span>
+          <span>Price ({market.quote})</span>
           <input
             inputMode="decimal"
             value={form.price}
-            placeholder={mid ? mid.toFixed(1) : ''}
+            placeholder={mid ? mid.toFixed(dp) : ''}
             onChange={(e) => form.set({ price: e.target.value.trim() })}
           />
           <button
             type="button"
             className="link small"
-            onClick={() => mid && form.set({ price: mid.toFixed(1) })}
+            onClick={() => mid && form.set({ price: mid.toFixed(dp) })}
           >
             Mid
           </button>
@@ -98,7 +105,7 @@ export function OrderForm() {
       )}
 
       <label className="field">
-        <span>Size (BTC)</span>
+        <span>Size ({market.base})</span>
         <input
           inputMode="decimal"
           value={form.size}
@@ -145,7 +152,7 @@ export function OrderForm() {
           ? agent
             ? 'Submitting…'
             : 'Confirm in wallet…'
-          : `${form.side === 'buy' ? 'Buy' : 'Sell'} ${form.type}`}
+          : `${form.side === 'buy' ? 'Buy' : 'Sell'} ${market.base} ${form.type}`}
       </button>
 
       {gate.kind === 'ok' && (
@@ -228,7 +235,12 @@ function GateAction({
   }
 }
 
-function validate(type: 'limit' | 'market', price: string, size: string): string | null {
+function validate(
+  market: MarketConfig,
+  type: 'limit' | 'market',
+  price: string,
+  size: string,
+): string | null {
   if (!isDecimalString(size) || Number(size) <= 0) return 'Enter a size.';
   if (Number(size) < Number(market.minSize)) return `Minimum size is ${market.minSize}.`;
   if (!isMultipleOf(size, market.stepSize)) return `Size must be a multiple of ${market.stepSize}.`;

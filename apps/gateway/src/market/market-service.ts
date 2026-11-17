@@ -12,6 +12,7 @@ import {
   OrderBook,
   type ServerMessage,
   SYMBOLS,
+  TICKER_INTERVAL_MS,
   type TradeDTO,
 } from '@paperperp/shared';
 import type { Logger } from '../logger';
@@ -100,6 +101,12 @@ export class MarketService {
     this.venue.start(this.sink);
     this.timers.push(setInterval(() => this.flush(), BOOK_PUBLISH_INTERVAL_MS));
     this.timers.push(setInterval(() => this.checkStatus(), 250));
+    this.timers.push(
+      setInterval(
+        () => this.publisher.publish(channels.tickers, this.tickersMessage()),
+        TICKER_INTERVAL_MS,
+      ),
+    );
     await Promise.all(SYMBOLS.map((s) => this.loadHistory(s)));
   }
 
@@ -166,6 +173,17 @@ export class MarketService {
       status: st.status,
       reason: st.statusReason,
       since: st.statusSince,
+    };
+  }
+
+  /** Every market's mid and status, for marking positions outside the viewed market. */
+  tickersMessage(): ServerMessage {
+    return {
+      type: 'tickers',
+      tickers: SYMBOLS.map((symbol) => {
+        const st = this.st(symbol);
+        return { symbol, mid: st.book.mid() ?? null, status: st.status };
+      }),
     };
   }
 

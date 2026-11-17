@@ -12,8 +12,10 @@ handling, deployment and observability.
 
 ## What it does
 
-- **Live BTC-PERP market** from Binance USDⓈ-M (or Hyperliquid): order book,
-  trades tape and 1m candles, streamed through the gateway over WebSocket.
+- **Live BTC-PERP, ETH-PERP and SOL-PERP markets** from Binance USDⓈ-M (or
+  Hyperliquid): order book, trades tape and 1m candles, streamed through the
+  gateway over WebSocket. Switch markets from the header; positions in every
+  market stay marked to their live price.
 - **Sign-In with Ethereum** (EIP-4361) with any EIP-6963 browser wallet;
   10,000 paper USDC per account.
 - **EIP-712 signed orders and cancels** (limit GTC, market as IOC with a

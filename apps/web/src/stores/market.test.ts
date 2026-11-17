@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { marketFeed, useMarket } from './market';
+import { marketFeed, markOf, useMarket } from './market';
 
 const snapshot = (seq: number, epoch = 'e1') => ({
   type: 'book.snapshot' as const,
@@ -56,5 +56,49 @@ describe('market feed mirror', () => {
     const before = useMarket.getState().resyncs;
     marketFeed._inject(delta(5, 6, 'new'));
     expect(useMarket.getState().resyncs).toBe(before + 1);
+  });
+
+  it('drops the old market on switch and ignores its late messages', () => {
+    marketFeed._inject(snapshot(40));
+    marketFeed._flushNow();
+    expect(useMarket.getState().mid).toBe(100.5);
+
+    marketFeed.setSymbol('ETH-PERP');
+    let s = useMarket.getState();
+    expect(s.symbol).toBe('ETH-PERP');
+    expect(s.mid).toBeUndefined();
+    expect(s.book.bids).toEqual([]);
+    expect(s.status).toBe('reconnecting');
+
+    // A BTC delta still in flight must not touch the ETH mirror or trigger a resync.
+    const resyncs = s.resyncs;
+    marketFeed._inject(delta(40, 41));
+    marketFeed._inject({
+      ...snapshot(1),
+      symbol: 'ETH-PERP',
+      bids: [[3_000, 1]],
+      asks: [[3_001, 1]],
+    });
+    marketFeed._flushNow();
+    s = useMarket.getState();
+    expect(s.resyncs).toBe(resyncs);
+    expect(s.mid).toBe(3_000.5);
+
+    marketFeed.setSymbol('BTC-PERP');
+  });
+
+  it('marks other markets from the tickers channel', () => {
+    marketFeed._inject({
+      type: 'tickers',
+      tickers: [
+        { symbol: 'BTC-PERP', mid: 65_000, status: 'live' },
+        { symbol: 'SOL-PERP', mid: 151.25, status: 'live' },
+      ],
+    });
+    const s = useMarket.getState();
+    expect(markOf(s, 'SOL-PERP')).toBe(151.25);
+    // The viewed market uses its own live mirror, not the once-a-second ticker.
+    expect(markOf(s, s.symbol)).toBe(s.mid);
+    expect(markOf(s, 'ETH-PERP')).toBeUndefined();
   });
 });

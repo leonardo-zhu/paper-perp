@@ -76,6 +76,36 @@ describe('order entry', () => {
     expect(acct.body.account.balance).toBeLessThan(10_000);
   });
 
+  it("keeps a separate position per market and checks each market's tick size", async () => {
+    const h = createHarness();
+    const wallet = newAccount();
+    const cookie = await h.login(wallet);
+    // ETH ticks are 0.01; BTC's are 0.1, so this price is only valid for ETH.
+    const eth = await h.request('/api/orders', {
+      cookie,
+      body: await signedOrder(
+        wallet,
+        makeOrder(wallet, { symbol: 'ETH-PERP', price: '65010.05', size: '0.25' }),
+      ),
+    });
+    expect(eth.status).toBe(201);
+    const btcBadTick = await h.request('/api/orders', {
+      cookie,
+      body: await signedOrder(wallet, makeOrder(wallet, { price: '65010.05' })),
+    });
+    expect(btcBadTick.body.error.code).toBe('invalid_order');
+    await h.request('/api/orders', {
+      cookie,
+      body: await signedOrder(wallet, makeOrder(wallet, { size: '0.1' })),
+    });
+
+    const acct = await h.request('/api/account', { cookie });
+    const sizes = Object.fromEntries(
+      acct.body.positions.map((p: { symbol: string; size: number }) => [p.symbol, p.size]),
+    );
+    expect(sizes).toEqual({ 'BTC-PERP': 0.1, 'ETH-PERP': 0.25 });
+  });
+
   it('is idempotent: the same signed order submitted twice fills once', async () => {
     const h = createHarness();
     const wallet = newAccount();

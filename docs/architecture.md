@@ -63,6 +63,9 @@ flowchart LR
 3. **Status**: `reconnecting` (socket down or no snapshot yet) → `live` →
    `stale` (no data for `STALE_AFTER_MS`). Every change is pushed on the
    book channel and exported as the `market_live` gauge.
+   A browser streams the book, trades and candles of the one market it is
+   showing. The `tickers` channel carries every market's mid and status once
+   a second, so positions in other markets are still marked live.
 4. **WS hub** serialises each message once and fans it out. Clients whose
    send buffer exceeds 1 MB are dropped, and clients silent for 45 s are
    swept. The upgrade is refused for unknown `Origin`s, which protects

@@ -1,9 +1,10 @@
 import {
-  decimalsOf,
-  getMarket,
   isTerminal,
+  type MarketSymbol,
   type OrderDTO,
   type PositionDTO,
+  priceDecimals,
+  sizeDecimals,
 } from '@paperperp/shared';
 import { useState } from 'react';
 import { useSession, useTradingGate } from '../features/session';
@@ -17,7 +18,9 @@ import {
   useResetAccount,
 } from '../features/trading';
 import { fmtPrice, fmtSigned, fmtSize, fmtTime, fmtUsd } from '../lib/format';
-import { useMarket } from '../stores/market';
+import { markOf, useMarket } from '../stores/market';
+
+type MarkFn = (symbol: string) => number | undefined;
 
 type Tab = 'positions' | 'open' | 'history' | 'fills';
 
@@ -27,7 +30,10 @@ export function AccountPanel() {
   const account = useAccountData();
   const orders = useOrders();
   const fills = useFills();
+  const symbol = useMarket((s) => s.symbol);
   const mid = useMarket((s) => s.mid);
+  const tickers = useMarket((s) => s.tickers);
+  const markFor: MarkFn = (sym) => markOf({ symbol, mid, tickers }, sym);
   const reset = useResetAccount();
 
   if (!session) {
@@ -42,7 +48,7 @@ export function AccountPanel() {
   const open = (orders.data ?? []).filter((o) => !isTerminal(o.status));
   const history = (orders.data ?? []).filter((o) => isTerminal(o.status));
   const a = account.data?.account;
-  const upnl = positions.reduce((n, p) => n + liveUnrealized(p, mid), 0);
+  const upnl = positions.reduce((n, p) => n + liveUnrealized(p, markFor(p.symbol)), 0);
   const equity = a ? a.balance + upnl : undefined;
 
   return (
@@ -81,7 +87,7 @@ export function AccountPanel() {
         ))}
       </div>
       <div className="table-wrap">
-        {tab === 'positions' && <Positions positions={positions} mid={mid} />}
+        {tab === 'positions' && <Positions positions={positions} markFor={markFor} />}
         {tab === 'open' && <Orders orders={open} cancellable />}
         {tab === 'history' && <Orders orders={history} />}
         {tab === 'fills' && (
@@ -89,6 +95,7 @@ export function AccountPanel() {
             <thead>
               <tr>
                 <th>Time</th>
+                <th>Market</th>
                 <th>Side</th>
                 <th>Price</th>
                 <th>Size</th>
@@ -101,9 +108,10 @@ export function AccountPanel() {
               {(fills.data ?? []).map((f) => (
                 <tr key={f.id}>
                   <td className="mono">{fmtTime(f.ts)}</td>
+                  <td>{f.symbol}</td>
                   <td className={f.side === 'buy' ? 'up' : 'down'}>{f.side}</td>
-                  <td className="mono">{fmtPrice(f.price)}</td>
-                  <td className="mono">{fmtSize(f.size)}</td>
+                  <td className="mono">{fmtPrice(f.price, priceDecimals(f.symbol))}</td>
+                  <td className="mono">{fmtSize(f.size, sizeDecimals(f.symbol))}</td>
                   <td className="mono">{fmtUsd(f.fee)}</td>
                   <td>{f.liquidity}</td>
                   <td className={`mono ${f.realizedPnl >= 0 ? 'up' : 'down'}`}>
@@ -128,7 +136,7 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: 'up
   );
 }
 
-function Positions({ positions, mid }: { positions: PositionDTO[]; mid: number | undefined }) {
+function Positions({ positions, markFor }: { positions: PositionDTO[]; markFor: MarkFn }) {
   const place = usePlaceOrder();
   const gate = useTradingGate();
   if (!positions.length) return <p className="muted pad">No open positions.</p>;
@@ -147,14 +155,16 @@ function Positions({ positions, mid }: { positions: PositionDTO[]; mid: number |
       </thead>
       <tbody>
         {positions.map((p) => {
-          const upnl = liveUnrealized(p, mid);
-          const dp = decimalsOf(getMarket(p.symbol).stepSize);
+          const mark = markFor(p.symbol);
+          const upnl = liveUnrealized(p, mark);
+          const pdp = priceDecimals(p.symbol);
+          const dp = sizeDecimals(p.symbol);
           return (
             <tr key={p.symbol} data-testid="position-row">
               <td>{p.symbol}</td>
-              <td className={`mono ${p.size > 0 ? 'up' : 'down'}`}>{fmtSize(p.size)}</td>
-              <td className="mono">{fmtPrice(p.entryPrice)}</td>
-              <td className="mono">{fmtPrice(mid ?? p.markPrice)}</td>
+              <td className={`mono ${p.size > 0 ? 'up' : 'down'}`}>{fmtSize(p.size, dp)}</td>
+              <td className="mono">{fmtPrice(p.entryPrice, pdp)}</td>
+              <td className="mono">{fmtPrice(mark ?? p.markPrice, pdp)}</td>
               <td className={`mono ${upnl >= 0 ? 'up' : 'down'}`}>{fmtSigned(upnl)}</td>
               <td className="mono">{fmtSigned(p.realizedPnl)}</td>
               <td>
@@ -164,6 +174,7 @@ function Positions({ positions, mid }: { positions: PositionDTO[]; mid: number |
                   disabled={gate.kind !== 'ok' || place.isPending}
                   onClick={() =>
                     place.mutate({
+                      symbol: p.symbol as MarketSymbol,
                       side: p.size > 0 ? 'sell' : 'buy',
                       type: 'market',
                       price: '',
@@ -193,6 +204,7 @@ function Orders({ orders, cancellable }: { orders: OrderDTO[]; cancellable?: boo
       <thead>
         <tr>
           <th>Time</th>
+          <th>Market</th>
           <th>Side</th>
           <th>Type</th>
           <th>Price</th>
@@ -205,14 +217,16 @@ function Orders({ orders, cancellable }: { orders: OrderDTO[]; cancellable?: boo
         {orders.map((o) => (
           <tr key={o.cloid} data-testid="order-row" data-status={o.status}>
             <td className="mono">{fmtTime(o.createdAt)}</td>
+            <td>{o.symbol}</td>
             <td className={o.side === 'buy' ? 'up' : 'down'}>
               {o.side}
               {o.reduceOnly ? ' (RO)' : ''}
             </td>
             <td>{o.type}</td>
-            <td className="mono">{fmtPrice(o.avgFillPrice ?? o.price)}</td>
+            <td className="mono">{fmtPrice(o.avgFillPrice ?? o.price, priceDecimals(o.symbol))}</td>
             <td className="mono">
-              {fmtSize(o.filledSize)} / {fmtSize(o.size)}
+              {fmtSize(o.filledSize, sizeDecimals(o.symbol))} /{' '}
+              {fmtSize(o.size, sizeDecimals(o.symbol))}
             </td>
             <td>
               <span className={`status ${o.status}`} title={o.reason ?? undefined}>

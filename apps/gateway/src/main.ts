@@ -99,6 +99,7 @@ hub = new Hub({
   },
   initialMessages: (channel, account): ServerMessage[] => {
     if (channel === channels.account) return account ? engine.initialAccountMessages(account) : [];
+    if (channel === channels.tickers) return [market.tickersMessage()];
     const [kind, symbol] = channel.split(':') as [string, MarketSymbol];
     if (kind === 'book') return [market.statusMessage(symbol), market.snapshotMessage(symbol)];
     if (kind === 'trades') return [market.tradesMessage(symbol)];

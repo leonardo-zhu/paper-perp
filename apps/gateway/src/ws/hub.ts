@@ -248,7 +248,7 @@ export class Hub implements Publisher {
 }
 
 function isValidChannel(ch: string): boolean {
-  if (ch === channels.account) return true;
+  if (ch === channels.account || ch === channels.tickers) return true;
   const [kind, symbol, interval] = ch.split(':');
   if (!symbol || !isMarketSymbol(symbol)) return false;
   if (kind === 'book' || kind === 'trades') return interval === undefined;

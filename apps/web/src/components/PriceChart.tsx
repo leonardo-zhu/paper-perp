@@ -1,4 +1,4 @@
-import type { Candle } from '@paperperp/shared';
+import { type Candle, getMarket, priceDecimals } from '@paperperp/shared';
 import { useQuery } from '@tanstack/react-query';
 import {
   CandlestickSeries,
@@ -10,7 +10,7 @@ import {
 } from 'lightweight-charts';
 import { useEffect, useRef } from 'react';
 import { api } from '../lib/api';
-import { marketFeed, useMarket } from '../stores/market';
+import { useMarket } from '../stores/market';
 
 const UP = '#22c993';
 const DOWN = '#f2545b';
@@ -34,11 +34,13 @@ export function PriceChart() {
   const candles = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const volume = useRef<ISeriesApi<'Histogram'> | null>(null);
   const lastTime = useRef(0);
+  const symbol = useMarket((s) => s.symbol);
 
   const history = useQuery({
-    queryKey: ['klines', marketFeed.symbol],
-    queryFn: () => api<{ candles: Candle[] }>(`/api/markets/${marketFeed.symbol}/klines`),
-    staleTime: Number.POSITIVE_INFINITY,
+    queryKey: ['klines', symbol],
+    queryFn: () => api<{ candles: Candle[] }>(`/api/markets/${symbol}/klines`),
+    // Refetch when switching back to a market, so the gap since the last visit is filled.
+    staleTime: 30_000,
   });
 
   useEffect(() => {
@@ -77,6 +79,20 @@ export function PriceChart() {
     };
   }, []);
 
+  // New market: wipe the old series and match the price scale to its tick size.
+  useEffect(() => {
+    lastTime.current = 0;
+    candles.current?.setData([]);
+    volume.current?.setData([]);
+    candles.current?.applyOptions({
+      priceFormat: {
+        type: 'price',
+        precision: priceDecimals(symbol),
+        minMove: Number(getMarket(symbol).tickSize),
+      },
+    });
+  }, [symbol]);
+
   useEffect(() => {
     const data = history.data?.candles;
     if (!data?.length || !candles.current || !volume.current) return;
@@ -103,7 +119,7 @@ export function PriceChart() {
   return (
     <section className="panel chart" aria-label="Price chart">
       <header className="panel-head">
-        <h2>BTC-PERP · 1m</h2>
+        <h2>{symbol} · 1m</h2>
         {history.isError && <span className="muted small">history unavailable</span>}
       </header>
       <div ref={el} className="chart-canvas" />

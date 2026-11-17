@@ -4,16 +4,34 @@ import {
   type Candle,
   channels,
   DEFAULT_SYMBOL,
+  isMarketSymbol,
   type MarketStatus,
+  type MarketSymbol,
   OrderBook,
   type ServerMessage,
+  type Ticker,
   type TradeDTO,
 } from '@paperperp/shared';
 import { create } from 'zustand';
 import { wsUrl } from '../config';
 import { ReconnectingSocket, type SocketState } from '../lib/socket';
 
+const SYMBOL_KEY = 'paperperp.market';
+
+/** Last market the viewer picked; storage can be unavailable (private mode, previews). */
+function initialSymbol(): MarketSymbol {
+  try {
+    const saved = localStorage.getItem(SYMBOL_KEY);
+    if (saved && isMarketSymbol(saved)) return saved;
+  } catch {}
+  return DEFAULT_SYMBOL;
+}
+
 export interface MarketState {
+  /** Market the terminal is showing; book, trades, candle and status belong to it. */
+  symbol: MarketSymbol;
+  /** Mid and status of every market, refreshed about once a second. */
+  tickers: Partial<Record<MarketSymbol, Ticker>>;
   socket: SocketState;
   rttMs: number | null;
   status: MarketStatus;
@@ -30,6 +48,8 @@ export interface MarketState {
 }
 
 export const useMarket = create<MarketState>(() => ({
+  symbol: initialSymbol(),
+  tickers: {},
   socket: 'closed',
   rttMs: null,
   status: 'reconnecting',
@@ -53,7 +73,6 @@ type PrivateMessage = Extract<ServerMessage, { type: 'order' | 'fill' | 'positio
  * animation frame (and not at all while the tab is hidden).
  */
 class MarketFeed {
-  readonly symbol = DEFAULT_SYMBOL;
   private readonly mirror = new OrderBook();
   private epoch: string | null = null;
   private resyncPending = false;
@@ -94,6 +113,35 @@ class MarketFeed {
     this.socket.restart();
   }
 
+  get symbol(): MarketSymbol {
+    return useMarket.getState().symbol;
+  }
+
+  /** Switch the viewed market: drop the old streams, clear its state, subscribe to the new one. */
+  setSymbol(symbol: MarketSymbol) {
+    const prev = this.symbol;
+    if (symbol === prev) return;
+    this.socket.send({ op: 'unsubscribe', channels: marketChannels(prev) });
+    this.mirror.reset();
+    this.epoch = null;
+    this.resyncPending = false;
+    this.pendingTrades = [];
+    useMarket.setState({
+      symbol,
+      book: { bids: [], asks: [] },
+      seq: -1,
+      mid: undefined,
+      trades: [],
+      candle: null,
+      status: 'reconnecting',
+      statusReason: `loading ${symbol}`,
+    });
+    try {
+      localStorage.setItem(SYMBOL_KEY, symbol);
+    } catch {}
+    this.socket.send({ op: 'subscribe', channels: marketChannels(symbol) });
+  }
+
   onPrivate(fn: (msg: PrivateMessage) => void): () => void {
     this.privateListeners.add(fn);
     return () => this.privateListeners.delete(fn);
@@ -102,15 +150,13 @@ class MarketFeed {
   private subscribeAll() {
     this.socket.send({
       op: 'subscribe',
-      channels: [
-        channels.book(this.symbol),
-        channels.trades(this.symbol),
-        channels.kline(this.symbol),
-      ],
+      channels: [...marketChannels(this.symbol), channels.tickers],
     });
   }
 
   private onMessage(msg: ServerMessage) {
+    // Messages for a market we just switched away from can still be in flight.
+    if ('symbol' in msg && msg.symbol !== this.symbol) return;
     switch (msg.type) {
       case 'hello':
         useMarket.setState({ authenticated: msg.authenticated });
@@ -146,6 +192,11 @@ class MarketFeed {
         return;
       case 'kline':
         useMarket.setState({ candle: msg.candle });
+        return;
+      case 'tickers':
+        useMarket.setState({
+          tickers: Object.fromEntries(msg.tickers.map((t) => [t.symbol, t])),
+        });
         return;
       case 'order':
       case 'fill':
@@ -197,4 +248,20 @@ class MarketFeed {
   }
 }
 
+function marketChannels(symbol: MarketSymbol): string[] {
+  return [channels.book(symbol), channels.trades(symbol), channels.kline(symbol)];
+}
+
 export const marketFeed = new MarketFeed();
+
+/**
+ * Best known mark price for any market: the live mirror for the viewed one,
+ * the tickers channel for the rest.
+ */
+export function markOf(
+  state: Pick<MarketState, 'symbol' | 'mid' | 'tickers'>,
+  symbol: string,
+): number | undefined {
+  if (symbol === state.symbol) return state.mid;
+  return state.tickers[symbol as MarketSymbol]?.mid ?? undefined;
+}

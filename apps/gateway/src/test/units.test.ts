@@ -1,7 +1,16 @@
-import { BOOK_PUBLISH_INTERVAL_MS, OrderBook, type ServerMessage } from '@paperperp/shared';
+import {
+  BOOK_PUBLISH_INTERVAL_MS,
+  decimalsOf,
+  MARKETS,
+  OrderBook,
+  type ServerMessage,
+  SYMBOLS,
+  TICKER_INTERVAL_MS,
+} from '@paperperp/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createLogger } from '../logger';
 import { MarketService } from '../market/market-service';
+import { MockVenue } from '../market/mock';
 import type { MarketVenue, VenueSink } from '../market/venue';
 import { createMetrics } from '../metrics';
 import { applyFill, planFills } from '../trading/matching';
@@ -122,5 +131,62 @@ describe('MarketService', () => {
     venue.sink.onConnection(false, 'closed');
     expect(svc.status('BTC-PERP')).toBe('reconnecting');
     svc.stop();
+  });
+
+  it("publishes every market's mid and status on the tickers channel", async () => {
+    const { venue, svc, sent } = await setup();
+    venue.sink.onConnection(true, null);
+    venue.sink.onBook('ETH-PERP', 'snapshot', [[3_000, 1]], [[3_000.02, 1]], Date.now());
+    vi.advanceTimersByTime(TICKER_INTERVAL_MS);
+
+    const last = sent.filter((s) => s.channel === 'tickers').at(-1)?.msg;
+    expect(last?.type).toBe('tickers');
+    const tickers = last?.type === 'tickers' ? last.tickers : [];
+    expect(tickers.map((t) => t.symbol)).toEqual(SYMBOLS);
+    expect(tickers.find((t) => t.symbol === 'ETH-PERP')).toMatchObject({
+      mid: 3_000.01,
+      status: 'live',
+    });
+    expect(tickers.find((t) => t.symbol === 'BTC-PERP')).toMatchObject({
+      mid: null,
+      status: 'reconnecting',
+    });
+    svc.stop();
+  });
+});
+
+describe('MockVenue', () => {
+  it('walks each market around its own price on its own tick', () => {
+    const books = new Map<string, { bids: [number, number][]; asks: [number, number][] }>();
+    const venue = new MockVenue({ tickMs: 1_000_000 });
+    venue.start({
+      onBook: (symbol, _kind, bids, asks) => books.set(symbol, { bids, asks }),
+      onTrades: () => {},
+      onKline: () => {},
+      onConnection: () => {},
+    });
+    venue.stop();
+
+    const mids = Object.fromEntries(
+      SYMBOLS.map((s) => {
+        const b = books.get(s)!;
+        return [s, (b.bids[0]![0] + b.asks[0]![0]) / 2];
+      }),
+    );
+    expect(mids['BTC-PERP']).toBeCloseTo(65_000, -1);
+    expect(mids['ETH-PERP']).toBeCloseTo(3_200, 0);
+    expect(mids['SOL-PERP']).toBeCloseTo(150, 0);
+
+    for (const s of SYMBOLS) {
+      const { bids, asks } = books.get(s)!;
+      const pdp = decimalsOf(MARKETS[s].tickSize);
+      const sdp = decimalsOf(MARKETS[s].stepSize);
+      for (const [p, size] of [...bids, ...asks]) {
+        expect(Number(p.toFixed(pdp))).toBe(p);
+        expect(Number(size.toFixed(sdp))).toBe(size);
+        expect(size).toBeGreaterThan(0);
+      }
+      expect(bids[0]![0]).toBeLessThan(asks[0]![0]);
+    }
   });
 });

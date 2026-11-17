@@ -8,6 +8,22 @@ test.describe('market data', () => {
     await expect(page.getByTestId('bids').locator('.book-row')).toHaveCount(12);
   });
 
+  test('switches markets and remembers the choice across reloads', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByTestId('market-status')).toHaveAttribute('data-status', 'live');
+    await page.getByLabel('Market').selectOption('ETH-PERP');
+
+    await expect(page.getByRole('heading', { name: 'ETH-PERP · 1m' })).toBeVisible();
+    await expect(page.getByTestId('market-status')).toHaveAttribute('data-status', 'live');
+    await expect(page.getByLabel('Size (ETH)')).toHaveValue('0.010');
+    // The mock walks ETH around 3,200 with two-decimal ticks.
+    await expect(page.getByTestId('mid-price')).toHaveText(/^3,\d{3}\.\d{2}$/);
+    await expect(page.getByTestId('bids').locator('.book-row')).toHaveCount(12);
+
+    await page.reload();
+    await expect(page.getByLabel('Market')).toHaveValue('ETH-PERP');
+  });
+
   test('degrades to read-only on an upstream outage and recovers without reload', async ({
     page,
     request,
@@ -58,7 +74,7 @@ test.describe('trading flow', () => {
     await page.getByRole('button', { name: 'Market', exact: true }).click();
     await page.getByLabel('Size (BTC)').fill('0.010');
     await page.getByTestId('submit-order').click();
-    await expect(page.getByText(/Bought 0.01 @/)).toBeVisible();
+    await expect(page.getByText(/Bought 0.01 BTC @/)).toBeVisible();
     await expect(page.getByTestId('position-row')).toHaveCount(1);
     await expect(page.getByTestId('position-row')).toContainText('0.010');
 

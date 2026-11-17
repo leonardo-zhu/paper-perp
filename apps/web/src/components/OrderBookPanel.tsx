@@ -1,4 +1,4 @@
-import type { Level } from '@paperperp/shared';
+import { type Level, priceDecimals, sizeDecimals } from '@paperperp/shared';
 import { memo, useMemo } from 'react';
 import { fmtPrice, fmtSize } from '../lib/format';
 import { useMarket } from '../stores/market';
@@ -7,6 +7,7 @@ import { useOrderForm } from '../stores/order-form';
 const ROWS = 12;
 
 export function OrderBookPanel() {
+  const symbol = useMarket((s) => s.symbol);
   const book = useMarket((s) => s.book);
   const status = useMarket((s) => s.status);
   const setForm = useOrderForm((s) => s.set);
@@ -21,7 +22,9 @@ export function OrderBookPanel() {
   const bestBid = book.bids[0]?.[0];
   const bestAsk = book.asks[0]?.[0];
   const spread = bestBid && bestAsk ? bestAsk - bestBid : undefined;
-  const pick = (price: number) => setForm({ price: price.toFixed(1), type: 'limit' });
+  const dp = priceDecimals(symbol);
+  const sdp = sizeDecimals(symbol);
+  const pick = (price: number) => setForm({ price: price.toFixed(dp), type: 'limit' });
 
   return (
     <section className={`panel book ${status !== 'live' ? 'dimmed' : ''}`} aria-label="Order book">
@@ -35,18 +38,40 @@ export function OrderBookPanel() {
       </div>
       <div className="book-side asks">
         {asks.map(([p, s, t]) => (
-          <Row key={p} price={p} size={s} total={t} max={max} side="ask" onPick={pick} />
+          <Row
+            key={p}
+            price={p}
+            size={s}
+            total={t}
+            max={max}
+            dp={dp}
+            sdp={sdp}
+            side="ask"
+            onPick={pick}
+          />
         ))}
       </div>
       <div className="spread" data-testid="spread">
         <span className="mono">
-          {fmtPrice(bestBid && bestAsk ? (bestBid + bestAsk) / 2 : undefined)}
+          {fmtPrice(bestBid && bestAsk ? (bestBid + bestAsk) / 2 : undefined, dp)}
         </span>
-        <span className="muted small">spread {spread !== undefined ? spread.toFixed(1) : '—'}</span>
+        <span className="muted small">
+          spread {spread !== undefined ? spread.toFixed(dp) : '—'}
+        </span>
       </div>
       <div className="book-side bids" data-testid="bids">
         {bids.map(([p, s, t]) => (
-          <Row key={p} price={p} size={s} total={t} max={max} side="bid" onPick={pick} />
+          <Row
+            key={p}
+            price={p}
+            size={s}
+            total={t}
+            max={max}
+            dp={dp}
+            sdp={sdp}
+            side="bid"
+            onPick={pick}
+          />
         ))}
       </div>
     </section>
@@ -58,6 +83,8 @@ const Row = memo(function Row(props: {
   size: number;
   total: number;
   max: number;
+  dp: number;
+  sdp: number;
   side: 'bid' | 'ask';
   onPick: (p: number) => void;
 }) {
@@ -65,9 +92,9 @@ const Row = memo(function Row(props: {
   return (
     <div className={`book-row ${props.side}`} onClick={() => props.onPick(props.price)}>
       <div className="depth" style={{ width: `${pct}%` }} />
-      <span className="mono price">{fmtPrice(props.price)}</span>
-      <span className="mono">{fmtSize(props.size)}</span>
-      <span className="mono muted">{fmtSize(props.total)}</span>
+      <span className="mono price">{fmtPrice(props.price, props.dp)}</span>
+      <span className="mono">{fmtSize(props.size, props.sdp)}</span>
+      <span className="mono muted">{fmtSize(props.total, props.sdp)}</span>
     </div>
   );
 });

@@ -106,6 +106,17 @@ a {
 .symbol {
   font-weight: 600;
 }
+.market-select {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+.market-select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
 .conn {
   display: flex;
   align-items: center;

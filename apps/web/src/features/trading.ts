@@ -4,11 +4,13 @@ import {
   decimalsOf,
   type FillDTO,
   getMarket,
+  type MarketSymbol,
   type OrderDTO,
   type OrderMessage,
   orderTypedData,
   type PlaceOrderResponse,
   type PositionDTO,
+  priceDecimals,
   toE8,
   toWire,
 } from '@paperperp/shared';
@@ -18,7 +20,7 @@ import { type Hex, toHex } from 'viem';
 import { useConnection } from 'wagmi';
 import { CHAIN_ID } from '../config';
 import { ApiError, api, describeError } from '../lib/api';
-import { marketFeed, useMarket } from '../stores/market';
+import { marketFeed, markOf, useMarket } from '../stores/market';
 import { toast } from '../stores/toasts';
 import { useSession } from './session';
 import { deadlineIn, nextNonce, useSigner } from './signer';
@@ -119,6 +121,8 @@ export function useAccountSync() {
 }
 
 export interface OrderInput {
+  /** Defaults to the market on screen; set it when acting on another market (closing a position). */
+  symbol?: MarketSymbol;
   side: 'buy' | 'sell';
   type: 'limit' | 'market';
   /** Limit price (ignored for market orders). */
@@ -154,10 +158,10 @@ export function usePlaceOrder() {
   return useMutation({
     mutationFn: async (input: OrderInput): Promise<PlaceOrderResponse> => {
       if (!address) throw new Error('Connect your wallet first.');
-      const symbol = marketFeed.symbol;
+      const symbol = input.symbol ?? marketFeed.symbol;
       const market = getMarket(symbol);
-      const mid = useMarket.getState().mid;
-      if (input.type === 'market' && !mid) throw new Error('No market price yet.');
+      const mid = markOf(useMarket.getState(), symbol);
+      if (input.type === 'market' && !mid) throw new Error(`No ${symbol} price yet.`);
       const price =
         input.type === 'market'
           ? worstPrice(input.side, mid!, input.slippagePct, market.tickSize)
@@ -216,13 +220,14 @@ export function usePlaceOrder() {
     onSuccess: (res) => {
       upsertOrder(qc, res.order);
       const o = res.order;
+      const base = getMarket(o.symbol).base;
       if (o.status === 'filled')
         toast.success(
-          `${o.side === 'buy' ? 'Bought' : 'Sold'} ${o.filledSize} @ ${o.avgFillPrice?.toFixed(1)}`,
+          `${o.side === 'buy' ? 'Bought' : 'Sold'} ${o.filledSize} ${base} @ ${o.avgFillPrice?.toFixed(priceDecimals(o.symbol))}`,
         );
-      else if (o.status === 'open') toast.info(`Limit order placed @ ${o.price}`);
+      else if (o.status === 'open') toast.info(`${o.symbol}: Limit order placed @ ${o.price}`);
       else if (o.status === 'partially_filled')
-        toast.info(`Partially filled ${o.filledSize}/${o.size}`);
+        toast.info(`Partially filled ${o.filledSize}/${o.size} ${base}`);
       else if (o.status === 'canceled')
         toast.error(
           o.reason === 'no_liquidity'
@@ -275,8 +280,8 @@ export function useResetAccount() {
   });
 }
 
-/** Live unrealised PnL from the local mid, so it ticks without server pushes. */
-export function liveUnrealized(position: PositionDTO, mid: number | undefined): number {
-  const mark = mid ?? position.markPrice ?? position.entryPrice;
-  return position.size * (mark - position.entryPrice);
+/** Live unrealised PnL from a local mark (mirror or tickers), so it ticks without server pushes. */
+export function liveUnrealized(position: PositionDTO, mark: number | undefined): number {
+  const ref = mark ?? position.markPrice ?? position.entryPrice;
+  return position.size * (ref - position.entryPrice);
 }

@@ -1,10 +1,14 @@
+import { isMarketSymbol, priceDecimals, SYMBOLS } from '@paperperp/shared';
 import { fmtPrice } from '../lib/format';
-import { useMarket } from '../stores/market';
+import { marketFeed, useMarket } from '../stores/market';
+import { useOrderForm } from '../stores/order-form';
 import { WalletArea } from './WalletArea';
 
 export function Header() {
+  const symbol = useMarket((s) => s.symbol);
   const mid = useMarket((s) => s.mid);
   const book = useMarket((s) => s.book);
+  const dp = priceDecimals(symbol);
   const spread = book.asks[0] && book.bids[0] ? book.asks[0][0] - book.bids[0][0] : undefined;
   return (
     <header className="topbar">
@@ -23,11 +27,29 @@ export function Header() {
         <span className="pill">paper</span>
       </div>
       <div className="ticker">
-        <span className="symbol">BTC-PERP</span>
+        <select
+          className="symbol market-select"
+          aria-label="Market"
+          value={symbol}
+          onChange={(e) => {
+            const next = e.target.value;
+            if (!isMarketSymbol(next)) return;
+            marketFeed.setSymbol(next);
+            useOrderForm.getState().resetFor(next);
+          }}
+        >
+          {SYMBOLS.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
         <span className="mono big" data-testid="mid-price">
-          {fmtPrice(mid)}
+          {fmtPrice(mid, dp)}
         </span>
-        <span className="muted small">spread {spread !== undefined ? spread.toFixed(1) : '—'}</span>
+        <span className="muted small">
+          spread {spread !== undefined ? spread.toFixed(dp) : '—'}
+        </span>
       </div>
       <ConnectionIndicator />
       <WalletArea />
