@@ -6,7 +6,7 @@ const gateway = process.env.GATEWAY_URL ?? 'http://localhost:8787';
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 5173,
+    port: Number(process.env.WEB_PORT ?? 5173),
     strictPort: true,
     proxy: {
       '/api': { target: gateway, changeOrigin: false },
@@ -20,5 +20,6 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     include: ['src/**/*.test.ts'],
+    exclude: ['e2e/**'],
   },
 });
