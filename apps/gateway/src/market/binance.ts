@@ -25,6 +25,8 @@ interface DepthEvent {
 interface SyncState {
   /** Last applied update id (`u`), or null while waiting for a snapshot. */
   lastU: number | null;
+  /** True right after the snapshot: the next event must straddle lastUpdateId. */
+  awaitingFirst: boolean;
   buffer: DepthEvent[];
   snapshotInFlight: boolean;
 }
@@ -32,8 +34,9 @@ interface SyncState {
 /**
  * Binance USDⓈ-M futures adapter. Diff-depth stream + REST snapshot:
  *   1. buffer stream events, 2. fetch snapshot (lastUpdateId),
- *   3. drop events with u < lastUpdateId, the first applied event must
- *      straddle lastUpdateId, 4. afterwards every event's `pu` must equal the
+ *   3. drop events with u < lastUpdateId; the first applied event must
+ *      straddle it (U <= lastUpdateId <= u). Its `pu` is NOT comparable to
+ *      the snapshot id, 4. afterwards every event's `pu` must equal the
  *      previous `u` — otherwise we lost a message and resync from step 1.
  */
 export class BinanceVenue implements MarketVenue {
@@ -156,25 +159,36 @@ export class BinanceVenue implements MarketVenue {
       st.buffer.push(ev);
       return;
     }
-    if (ev.pu !== st.lastU) {
-      this.deps.log.warn({ symbol, expected: st.lastU, pu: ev.pu }, 'binance depth gap, resyncing');
+    if (this.ingest(symbol, st, ev) === 'gap') {
+      this.deps.log.warn(
+        { symbol, lastU: st.lastU, U: ev.U, pu: ev.pu },
+        'binance depth gap, resyncing',
+      );
       this.resync(symbol, 'gap');
       // Buffer into the fresh sync state so it can be replayed after the snapshot.
       this.sync.get(symbol)?.buffer.push(ev);
-      return;
     }
-    this.applyEvent(symbol, st, ev);
   }
 
-  private applyEvent(symbol: MarketSymbol, st: SyncState, ev: DepthEvent): void {
+  /** Apply one event to a synced book, or report that continuity is broken. */
+  private ingest(symbol: MarketSymbol, st: SyncState, ev: DepthEvent): 'ok' | 'gap' {
+    const lastU = st.lastU!;
+    if (st.awaitingFirst) {
+      if (ev.u < lastU) return 'ok'; // fully contained in the snapshot
+      if (ev.U > lastU) return 'gap'; // snapshot older than the stream
+      st.awaitingFirst = false;
+    } else if (ev.pu !== lastU) {
+      return 'gap';
+    }
     st.lastU = ev.u;
     this.sink?.onBook(symbol, 'delta', parseLevels(ev.b), parseLevels(ev.a), ev.E);
+    return 'ok';
   }
 
   private resync(symbol: MarketSymbol, reason: string): void {
     const prev = this.sync.get(symbol);
     if (prev?.snapshotInFlight) return;
-    const st: SyncState = { lastU: null, buffer: [], snapshotInFlight: true };
+    const st: SyncState = { lastU: null, awaitingFirst: false, buffer: [], snapshotInFlight: true };
     this.sync.set(symbol, st);
     this.deps.metrics.upstreamResyncs.inc({ venue: this.name, reason });
     void this.loadSnapshot(symbol, st);
@@ -194,21 +208,18 @@ export class BinanceVenue implements MarketVenue {
         asks: [string, string][];
       };
       if (this.sync.get(symbol) !== st) return; // superseded by a reconnect
-      const pending = st.buffer.filter((e) => e.u >= snap.lastUpdateId);
-      const first = pending[0];
-      if (first && first.U > snap.lastUpdateId) {
-        // Snapshot is older than the stream we buffered; try again.
-        st.snapshotInFlight = false;
-        setTimeout(() => this.resync(symbol, 'stale_snapshot'), 500);
-        return;
-      }
+      const buffered = st.buffer;
       st.buffer = [];
       st.snapshotInFlight = false;
       st.lastU = snap.lastUpdateId;
+      st.awaitingFirst = true;
       this.sink?.onBook(symbol, 'snapshot', parseLevels(snap.bids), parseLevels(snap.asks), snap.E);
-      for (const [i, ev] of pending.entries()) {
-        if (i > 0 && ev.pu !== st.lastU) return this.resync(symbol, 'gap');
-        this.applyEvent(symbol, st, ev);
+      for (const ev of buffered) {
+        if (this.ingest(symbol, st, ev) === 'gap') {
+          // Usually the snapshot was older than the buffered stream; retry shortly.
+          setTimeout(() => this.resync(symbol, 'stale_snapshot'), 500);
+          return;
+        }
       }
     } catch (err) {
       this.deps.log.warn({ symbol, err: (err as Error).message }, 'binance snapshot failed');
