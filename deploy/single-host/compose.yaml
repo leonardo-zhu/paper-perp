@@ -1,0 +1,23 @@
+# Single container behind an existing reverse proxy (Caddy/nginx/Traefik on
+# the same host). Copy this file and .env.example to the server, set
+# IMAGE_TAG, PORT and the origin variables, then `docker compose up -d`.
+services:
+  paperperp:
+    image: paperperp:${IMAGE_TAG:?set IMAGE_TAG in .env}
+    container_name: paperperp
+    restart: unless-stopped
+    network_mode: host
+    env_file: .env
+    environment:
+      HOST: 127.0.0.1
+      DATABASE_PATH: /data/paperperp.db
+      TRUST_PROXY: "true"
+      COOKIE_SECURE: "true"
+    volumes:
+      - ${DATA_DIR:-./data}:/data
+    mem_limit: 256m
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "2"

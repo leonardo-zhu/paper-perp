@@ -1,0 +1,63 @@
+# Generic self-hosted stack: app behind Caddy (automatic HTTPS), optional
+# Prometheus + Grafana with `docker compose --profile monitoring up -d`.
+#
+#   DOMAIN=perp.example.com docker compose up -d --build
+
+services:
+  app:
+    build:
+      context: .
+      args:
+        RELEASE: ${RELEASE:-dev}
+        VITE_CHAIN_ID: ${CHAIN_ID:-421614}
+    image: paperperp:${RELEASE:-dev}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      ALLOWED_ORIGINS: https://${DOMAIN:-localhost}
+      SIWE_DOMAINS: ${DOMAIN:-localhost}
+      TRUST_PROXY: "true"
+      COOKIE_SECURE: "true"
+    volumes:
+      - app-data:/data
+    expose:
+      - "8787"
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on: [app]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+
+  prometheus:
+    profiles: [monitoring]
+    image: prom/prometheus:v3.5.0
+    restart: unless-stopped
+    volumes:
+      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/alerts.yml:/etc/prometheus/alerts.yml:ro
+    ports:
+      - "127.0.0.1:9091:9090"
+
+  grafana:
+    profiles: [monitoring]
+    image: grafana/grafana:12.1.0
+    restart: unless-stopped
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./deploy/grafana:/etc/grafana/provisioning:ro
+    ports:
+      - "127.0.0.1:3001:3000"
+
+volumes:
+  app-data:
+  caddy-data:

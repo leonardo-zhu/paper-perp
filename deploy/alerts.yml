@@ -1,0 +1,36 @@
+groups:
+  - name: paperperp
+    rules:
+      - alert: MarketFeedNotLive
+        expr: min(market_live) == 0
+        for: 2m
+        labels: { severity: page }
+        annotations:
+          summary: Market feed has been stale or reconnecting for 2 minutes (trading is paused).
+
+      - alert: UpstreamResyncStorm
+        expr: sum(rate(upstream_resyncs_total{reason="gap"}[5m])) > 0.2
+        for: 10m
+        labels: { severity: ticket }
+        annotations:
+          summary: Order book resyncs more than once every 5s; check venue connectivity.
+
+      - alert: SlowClientsDropped
+        expr: increase(ws_slow_client_drops_total[10m]) > 20
+        labels: { severity: ticket }
+        annotations:
+          summary: Many WebSocket clients dropped for backpressure.
+
+      - alert: HighApiLatency
+        expr: histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{route="/api/orders"}[5m]))) > 0.25
+        for: 5m
+        labels: { severity: ticket }
+        annotations:
+          summary: p99 order placement latency above 250ms.
+
+      - alert: Http5xx
+        expr: sum(rate(http_request_duration_seconds_count{status=~"5.."}[5m])) > 0.1
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: Gateway is returning 5xx responses.
