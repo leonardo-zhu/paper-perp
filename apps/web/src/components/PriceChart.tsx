@@ -45,7 +45,14 @@ export function PriceChart() {
     if (!el.current) return;
     const c = createChart(el.current, {
       autoSize: true,
-      layout: { background: { color: 'transparent' }, textColor: '#8b93a7', fontFamily: 'inherit' },
+      layout: {
+        background: { color: 'transparent' },
+        textColor: '#8b93a7',
+        fontFamily: 'inherit',
+        // Attribution required by the lightweight-charts NOTICE is given as a
+        // link in the page footer instead of the in-chart logo.
+        attributionLogo: false,
+      },
       grid: { vertLines: { color: '#1c2029' }, horzLines: { color: '#1c2029' } },
       rightPriceScale: { borderColor: '#262b36' },
       timeScale: { borderColor: '#262b36', timeVisible: true, secondsVisible: false },

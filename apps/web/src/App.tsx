@@ -30,7 +30,11 @@ export function App() {
         <TradesPanel />
       </main>
       <footer className="foot muted small">
-        Paper trading demo · real market data, simulated fills · no real funds ·{' '}
+        Paper trading demo · real market data, simulated fills · no real funds · Charts by{' '}
+        <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">
+          TradingView
+        </a>{' '}
+        ·{' '}
         <a href="https://github.com/leonardo-zhu/paper-perp" target="_blank" rel="noreferrer">
           source
         </a>
