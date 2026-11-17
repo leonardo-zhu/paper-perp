@@ -8,7 +8,10 @@ import {
   type VenueSink,
 } from './venue';
 
-const WS_BASE = 'wss://fstream.binance.com/stream';
+// Binance splits USDⓈ-M streams by path: order book on /public, trades and
+// klines on /market. The legacy root path now only carries depth.
+const WS_PUBLIC = 'wss://fstream.binance.com/public/stream';
+const WS_MARKET = 'wss://fstream.binance.com/market/stream';
 const REST_BASE = 'https://fapi.binance.com';
 
 interface DepthEvent {
@@ -41,21 +44,27 @@ interface SyncState {
  */
 export class BinanceVenue implements MarketVenue {
   readonly name = 'binance';
+  /** Depth stream: drives book liveness. */
   private socket: ReconnectingSocket;
+  /** Trades + klines: best effort, does not affect trading status. */
+  private marketSocket: ReconnectingSocket;
   private sink: VenueSink | null = null;
   private sync = new Map<MarketSymbol, SyncState>();
   private bySymbol = new Map<string, MarketSymbol>();
   private dropNextDepth = false;
 
   constructor(private readonly deps: VenueDeps) {
-    const streams = SYMBOLS.flatMap((s) => {
-      const u = MARKETS[s].upstream.binance;
-      this.bySymbol.set(u.toUpperCase(), s);
-      return [`${u}@depth@100ms`, `${u}@aggTrade`, `${u}@kline_1m`];
-    });
+    const depth: string[] = [];
+    const market: string[] = [];
+    for (const sym of SYMBOLS) {
+      const u = MARKETS[sym].upstream.binance;
+      this.bySymbol.set(u.toUpperCase(), sym);
+      depth.push(`${u}@depth@100ms`);
+      market.push(`${u}@aggTrade`, `${u}@kline_1m`);
+    }
     this.socket = new ReconnectingSocket(
       {
-        url: `${WS_BASE}?streams=${streams.join('/')}`,
+        url: `${WS_PUBLIC}?streams=${depth.join('/')}`,
         venue: this.name,
         idleTimeoutMs: 10_000,
         onOpen: () => {
@@ -70,21 +79,40 @@ export class BinanceVenue implements MarketVenue {
       },
       deps,
     );
+    this.marketSocket = new ReconnectingSocket(
+      {
+        url: `${WS_MARKET}?streams=${market.join('/')}`,
+        venue: `${this.name}-market`,
+        idleTimeoutMs: 30_000,
+        onOpen: () => {},
+        onMessage: (data) => this.handle(data),
+        onClose: () => {},
+      },
+      deps,
+    );
   }
 
   start(sink: VenueSink): void {
     this.sink = sink;
     this.socket.start();
+    this.marketSocket.start();
   }
 
   stop(): void {
     this.socket.stop();
+    this.marketSocket.stop();
   }
 
   injectFault(kind: FaultKind, ms = 8_000): void {
-    if (kind === 'disconnect') this.socket.drop('fault injection');
+    if (kind === 'disconnect') {
+      this.socket.drop('fault injection');
+      this.marketSocket.drop('fault injection');
+    }
     if (kind === 'gap') this.dropNextDepth = true;
-    if (kind === 'freeze') this.socket.frozenUntil = Date.now() + ms;
+    if (kind === 'freeze') {
+      this.socket.frozenUntil = Date.now() + ms;
+      this.marketSocket.frozenUntil = Date.now() + ms;
+    }
   }
 
   async fetchKlines(symbol: MarketSymbol, limit: number): Promise<Candle[]> {
