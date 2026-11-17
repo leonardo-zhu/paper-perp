@@ -120,10 +120,7 @@ const app = createApp({
 
 await market.start();
 const server = serve({ fetch: app.fetch, port: cfg.PORT, hostname: cfg.HOST }, (info) => {
-  log.info(
-    { port: info.port, venue: venue.name, env: cfg.APP_ENV, chainId: cfg.CHAIN_ID },
-    'gateway listening',
-  );
+  log.info({ port: info.port, venue: venue.name, chainId: cfg.CHAIN_ID }, 'gateway listening');
 }) as Server;
 hub.attach(server);
 

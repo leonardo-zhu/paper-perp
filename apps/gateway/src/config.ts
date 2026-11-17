@@ -30,6 +30,8 @@ const schema = z.object({
   TRUST_PROXY: bool.default(false),
   STALE_AFTER_MS: z.coerce.number().int().default(5_000),
   ENABLE_FAULT_INJECTION: bool.default(false),
+  /** Serve the built web app from this directory (single-container deploys). */
+  STATIC_DIR: z.string().optional(),
   SENTRY_DSN: z.string().optional(),
 });
 

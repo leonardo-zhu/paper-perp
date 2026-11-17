@@ -1,3 +1,4 @@
+import { serveStatic } from '@hono/node-server/serve-static';
 import {
   type ApproveAgentMessage,
   approveAgentBodySchema,
@@ -80,7 +81,26 @@ export function createApp(deps: AppDeps) {
       );
     }
   });
-  app.use(secureHeaders());
+  app.use(
+    secureHeaders({
+      contentSecurityPolicy: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        // React style attributes and lightweight-charts need inline styles.
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:'],
+        connectSrc: [
+          "'self'",
+          'wss:',
+          'https://*.ingest.sentry.io',
+          'https://*.ingest.us.sentry.io',
+        ],
+        frameAncestors: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'none'"],
+      },
+    }),
+  );
   app.use(
     '/api/*',
     cors({ origin: cfg.ALLOWED_ORIGINS, credentials: true, allowHeaders: ['content-type'] }),
@@ -241,6 +261,26 @@ export function createApp(deps: AppDeps) {
   }
 
   // ---------------------------------------------------------------- errors
+
+  // ---------------------------------------------------------------- web app (single-container mode)
+
+  if (cfg.STATIC_DIR) {
+    const root = cfg.STATIC_DIR;
+    app.use(
+      '/assets/*',
+      serveStatic({
+        root,
+        onFound: (_path, c) => c.header('cache-control', 'public, max-age=31536000, immutable'),
+      }),
+    );
+    app.use('*', serveStatic({ root }));
+    // SPA fallback for client routes; never for API paths.
+    app.get('*', async (c, next) => {
+      if (c.req.path.startsWith('/api/')) return next();
+      c.header('cache-control', 'no-cache');
+      return serveStatic({ root, path: 'index.html' })(c, next);
+    });
+  }
 
   app.notFound((c) => c.json(errorBody('not_found', errorMessage('not_found'), c), 404));
   app.onError((err, c) => {
