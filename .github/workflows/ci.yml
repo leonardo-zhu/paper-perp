@@ -3,6 +3,8 @@ name: CI
 on:
   push:
     branches: [main]
+    # Docs-only pushes don't need a build, and therefore don't redeploy.
+    paths-ignore: ["**.md", "docs/**"]
   pull_request:
 
 concurrency:
